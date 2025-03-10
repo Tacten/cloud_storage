@@ -321,22 +321,27 @@ def get_cloud_storage_client():
 	validate_config()
 
 	config: dict = frappe.conf.cloud_storage_settings
-	session = Session(
-		aws_access_key_id=config.get("access_key"),
-		aws_secret_access_key=config.get("secret"),
-		region_name=config.get("region"),
-	)
-	client = session.client(
-		"s3", endpoint_url=config.get("endpoint_url"), config=Config(signature_version="s3v4")
-	)
-	client.bucket = config.get("bucket")
-	client.folder = config.get("folder", None)
-	client.expiration = config.get("expiration", 120)
-	client.get_presigned_url = types.MethodType(get_presigned_url, client)
-	client.get_sharing_url = types.MethodType(get_sharing_url, client)
+	try:
+		if config.get("use_aws_roles"):
+			session = Session()
+		else:
+			session = Session(
+				aws_access_key_id=config.get("access_key"),
+				aws_secret_access_key=config.get("secret"),
+				region_name=config.get("region"),
+			)
+		client = session.client(
+			"s3", endpoint_url=config.get("endpoint_url"), config=Config(signature_version="s3v4")
+		)
+		client.bucket = config.get("bucket")
+		client.folder = config.get("folder", None)
+		client.expiration = config.get("expiration", 120)
+		client.get_presigned_url = types.MethodType(get_presigned_url, client)
+		client.get_sharing_url = types.MethodType(get_sharing_url, client)
+	except Exception as e:
+		frappe.throw(_("Failed to create AWS session: {0}").format(str(e)))
 
 	return client
-
 
 def validate_config() -> None:
 	config: dict = frappe.conf.cloud_storage_settings
@@ -353,17 +358,18 @@ def validate_config() -> None:
 			title=_("Cloud storage endpoint not configured"),
 		)
 
-	if not config.get("access_key"):
-		frappe.throw(
-			msg=_("Please setup access_key in your site configuration file"),
-			title=_("Cloud storage access key not configured"),
-		)
+	if not config.get("use_aws_roles"):
+		if not config.get("access_key"):
+			frappe.throw(
+				msg=_("Please setup access_key in your site configuration file"),
+				title=_("Cloud storage access key not configured"),
+			)
 
-	if not config.get("secret"):
-		frappe.throw(
-			msg=_("Please setup secret in your site configuration file"),
-			title=_("Cloud storage secret not configured"),
-		)
+		if not config.get("secret"):
+			frappe.throw(
+				msg=_("Please setup secret in your site configuration file"),
+				title=_("Cloud storage secret not configured"),
+			)
 
 	if not config.get("region"):
 		frappe.throw(
