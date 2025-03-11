@@ -324,6 +324,9 @@ def get_cloud_storage_client():
 	try:
 		if config.get("use_aws_roles"):
 			session = Session()
+			# Check if credentials are loaded
+			if session.get_credentials() is None:
+				raise frappe.ValidationError(_("Unable to locate credentials for assumed role"))
 		else:
 			session = Session(
 				aws_access_key_id=config.get("access_key"),
