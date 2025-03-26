@@ -432,6 +432,7 @@ def upload_file(file: File) -> File:
 	except Exception as e:
 		frappe.log_error("File Upload Error", e)
 	file.db_set("s3_key", path)
+	file.db_set("sharing_link", str(uuid.uuid4().int >> 64))
 	return file
 
 
