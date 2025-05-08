@@ -73,7 +73,7 @@ class CloudStorageFile(File):
 		self.file_size = frappe.form_dict.file_size or self.file_size
 
 	def after_insert(self) -> File:
-		if self.attached_to_doctype and self.attached_to_name and not self.file_association:  # type: ignore
+		if self.attached_to_doctype and self.attached_to_name and not self.file_association and not self.custom_disable_file_merge:  # type: ignore
 			if not self.content_hash and "/api/method/retrieve" in self.file_url:  # type: ignore
 				associated_doc = frappe.get_value("File", {"file_url": self.file_url}, "name")  # type: ignore
 			else:
@@ -122,13 +122,15 @@ class CloudStorageFile(File):
 	) -> None:
 		attached_to_doctype = attached_to_doctype or self.attached_to_doctype  # type: ignore
 		attached_to_name = attached_to_name or self.attached_to_name  # type: ignore
-
-		if not attached_to_doctype:
-			return
 		if not self.file_url:  # type: ignore
 			client = get_cloud_storage_client()
 			path = get_file_path(self, client.folder)
 			self.file_url = FILE_URL.format(path=path)
+		if self.custom_disable_file_merge:
+			return
+		if not attached_to_doctype:
+			return
+		print("associating files", attached_to_doctype, attached_to_name, self.file_name, self.name)
 		if not self.content_hash and "/api/method/retrieve" in self.file_url:  # type: ignore
 			associated_doc = frappe.get_value("File", {"file_url": self.file_url}, "name")  # type: ignore
 		else:
@@ -476,34 +478,35 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 		return file
 
 	# if a hash-conflict is found, update the existing document with a new file association
-	existing_file_hashes = frappe.get_all(
-		"File",
-		filters={"name": ["!=", file.name], "content_hash": file.content_hash},
-		pluck="name",
-	)
-
-	if existing_file_hashes:
-		file_doc: File = frappe.get_doc("File", existing_file_hashes[0])
-		file_doc.associate_files(file.attached_to_doctype, file.attached_to_name)
-		file_doc.save()
-		return file_doc
-
-	# if a filename-conflict is found, update the existing document with a new version instead
-	existing_file_names = frappe.get_all(
-		"File", filters={"name": ["!=", file.name], "file_name": file.file_name}, pluck="name"
-	)
-
-	if existing_file_names:
-		file_doc = frappe.get_doc("File", existing_file_names[0])
-		file_doc.update(
-			{
-				"content": file.content,
-				"content_hash": file.content_hash,
-				"content_type": file.content_type,
-			}
+	if not file.custom_disable_file_merge:
+		existing_file_hashes = frappe.get_all(
+			"File",
+			filters={"name": ["!=", file.name], "content_hash": file.content_hash},
+			pluck="name",
 		)
-		file_doc.associate_files(file.attached_to_doctype, file.attached_to_name)
-		file = file_doc
+
+		if existing_file_hashes:
+			file_doc: File = frappe.get_doc("File", existing_file_hashes[0])
+			file_doc.associate_files(file.attached_to_doctype, file.attached_to_name)
+			file_doc.save()
+			return file_doc
+
+		# if a filename-conflict is found, update the existing document with a new version instead
+		existing_file_names = frappe.get_all(
+			"File", filters={"name": ["!=", file.name], "file_name": file.file_name}, pluck="name"
+		)
+
+		if existing_file_names:
+			file_doc = frappe.get_doc("File", existing_file_names[0])
+			file_doc.update(
+				{
+					"content": file.content,
+					"content_hash": file.content_hash,
+					"content_type": file.content_type,
+				}
+			)
+			file_doc.associate_files(file.attached_to_doctype, file.attached_to_name)
+			file = file_doc
 
 	if remove_spaces_in_file_name:
 		file.file_name = file.file_name.replace(" ", "_")
