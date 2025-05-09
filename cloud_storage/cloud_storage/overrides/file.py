@@ -130,7 +130,6 @@ class CloudStorageFile(File):
 			return
 		if not attached_to_doctype:
 			return
-		print("associating files", attached_to_doctype, attached_to_name, self.file_name, self.name)
 		if not self.content_hash and "/api/method/retrieve" in self.file_url:  # type: ignore
 			associated_doc = frappe.get_value("File", {"file_url": self.file_url}, "name")  # type: ignore
 		else:
@@ -536,7 +535,11 @@ def delete_file(file: File, **kwargs) -> File:
 			except ClientError:
 				frappe.throw(_("Access denied: Could not delete file"))
 			except Exception as e:
-				print(f"EXCEPTION: {e}")
+				frappe.logger("web").error(
+					"Cloud Storage Error: Could not delete file {0} from bucket {1}\nError: {2}".format(
+						key, client.bucket, str(e)
+					)
+				)
 				frappe.log_error(str(e), "Cloud Storage Error: Could not delete file")
 
 	return file
