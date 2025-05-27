@@ -324,7 +324,9 @@ def get_cloud_storage_client():
 	config: dict = frappe.conf.cloud_storage_settings
 	try:
 		if config.get("use_aws_roles"):
-			session = Session()
+			session = Session(
+				region_name=config.get("region"),
+			)
 			# Check if credentials are loaded
 			if session.get_credentials() is None:
 				raise frappe.ValidationError(_("Unable to locate credentials for assumed role"))
