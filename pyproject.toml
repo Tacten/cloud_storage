@@ -1,3 +1,17 @@
+[project]
+name = "cloud_storage"
+version = "15.7.2"
+description = "Frappe App for integrating with cloud storage applications"
+authors = [{name = "AgriTheory", email = "support@agritheory.dev"}]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "boto3>=1.26.41",
+    "botocore>=1.29.41",
+    "python-magic>=0.4.27",
+    "moto[s3]>=4.1.6",
+]
+
 [tool.poetry]
 name = "cloud_storage"
 version = "15.7.2"
