@@ -446,11 +446,13 @@ def get_file_path(file: File, folder: str | None = None) -> str:
 	if file.attached_to_name:
 		attached_to_name = file.attached_to_name.replace("#", "%23")
 
+	file_name = file.file_name.replace("#", "%23")
+
 	fragments = [
 		folder,
 		parent_doctype,
 		attached_to_name,
-		file.file_name.replace("#", "%23"),
+		file_name,
 	]
 
 	valid_fragments: list[str] = list(filter(None, fragments))
@@ -513,6 +515,15 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 		file.file_name = file.file_name.replace(" ", "_")
 
 	file.file_name = strip_special_chars(file.file_name)
+	
+	if file.custom_disable_file_merge:
+		unique_suffix = uuid.uuid4().hex[:4]	
+		name_parts = file.file_name.rsplit(".", 1)
+		if len(name_parts) == 2:
+			file.file_name = f"{name_parts[0]}_{unique_suffix}.{name_parts[1]}"
+		else:
+			file.file_name = f"{file.file_name}_{unique_suffix}"
+	
 	file.flags.cloud_storage = True
 	return upload_file(file)
 
