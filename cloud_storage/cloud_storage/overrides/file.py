@@ -41,6 +41,10 @@ class CloudStorageFile(File):
 		return has_permission(self, ptype, user)
 
 	def validate(self) -> None:
+		if self.is_new() or self.get("__islocal"):
+			config = frappe.conf.cloud_storage_settings or {}
+			if config.get("disable_file_merge", True):
+				self.custom_disable_file_merge = 1
 		self.associate_files()
 		if self.flags.cloud_storage or self.flags.ignore_file_validate:
 			return
@@ -446,11 +450,13 @@ def get_file_path(file: File, folder: str | None = None) -> str:
 	if file.attached_to_name:
 		attached_to_name = file.attached_to_name.replace("#", "%23")
 
+	file_name = file.file_name.replace("#", "%23")
+
 	fragments = [
 		folder,
 		parent_doctype,
 		attached_to_name,
-		file.file_name.replace("#", "%23"),
+		file_name,
 	]
 
 	valid_fragments: list[str] = list(filter(None, fragments))
@@ -479,6 +485,10 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 		return file
 
 	# if a hash-conflict is found, update the existing document with a new file association
+	config = frappe.conf.cloud_storage_settings or {}
+	if not file.custom_disable_file_merge and config.get("disable_file_merge", True):
+		file.custom_disable_file_merge = 1
+
 	if not file.custom_disable_file_merge:
 		existing_file_hashes = frappe.get_all(
 			"File",
@@ -513,6 +523,21 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 		file.file_name = file.file_name.replace(" ", "_")
 
 	file.file_name = strip_special_chars(file.file_name)
+	
+	if file.custom_disable_file_merge:
+		# Check if a file with the same S3 key already exists
+		client = get_cloud_storage_client()
+		potential_s3_key = get_file_path(file, client.folder)
+		existing_file_with_key = frappe.db.exists("File", {"s3_key": potential_s3_key})
+		
+		if existing_file_with_key:
+			unique_suffix = uuid.uuid4().hex[:4]	
+			name_parts = file.file_name.rsplit(".", 1)
+			if len(name_parts) == 2:
+				file.file_name = f"{name_parts[0]}_{unique_suffix}.{name_parts[1]}"
+			else:
+				file.file_name = f"{file.file_name}_{unique_suffix}"
+	
 	file.flags.cloud_storage = True
 	return upload_file(file)
 
