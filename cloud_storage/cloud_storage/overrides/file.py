@@ -130,8 +130,6 @@ class CloudStorageFile(File):
 			client = get_cloud_storage_client()
 			path = get_file_path(self, client.folder)
 			self.file_url = FILE_URL.format(path=path)
-		if self.custom_disable_file_merge:
-			return
 		if not attached_to_doctype:
 			return
 		if not self.content_hash and "/api/method/retrieve" in self.file_url:  # type: ignore
@@ -478,6 +476,7 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 		"use_local", False
 	):
 		file.save_file_on_filesystem()
+		file.associate_files(file.attached_to_doctype, file.attached_to_name)
 		return file
 
 	if file.attached_to_doctype == "Data Import":
@@ -516,7 +515,6 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 					"content_type": file.content_type,
 				}
 			)
-			file_doc.associate_files(file.attached_to_doctype, file.attached_to_name)
 			file = file_doc
 
 	if remove_spaces_in_file_name:
@@ -528,17 +526,17 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 		# Check if a file with the same S3 key already exists
 		client = get_cloud_storage_client()
 		potential_s3_key = get_file_path(file, client.folder)
-		existing_file_with_key = frappe.db.exists("File", {"s3_key": potential_s3_key})
+		count_existing_files = frappe.db.count("File", filters={"s3_key": potential_s3_key})
 		
-		if existing_file_with_key:
-			unique_suffix = uuid.uuid4().hex[:4]	
+		if count_existing_files > 0:
 			name_parts = file.file_name.rsplit(".", 1)
 			if len(name_parts) == 2:
-				file.file_name = f"{name_parts[0]}_{unique_suffix}.{name_parts[1]}"
+				file.file_name = f"{name_parts[0]}_{count_existing_files}.{name_parts[1]}"
 			else:
-				file.file_name = f"{file.file_name}_{unique_suffix}"
+				file.file_name = f"{file.file_name}_{count_existing_files}"
 	
 	file.flags.cloud_storage = True
+	file.associate_files(file.attached_to_doctype, file.attached_to_name)
 	return upload_file(file)
 
 
