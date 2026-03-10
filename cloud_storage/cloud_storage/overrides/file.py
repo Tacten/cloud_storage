@@ -130,8 +130,6 @@ class CloudStorageFile(File):
 			client = get_cloud_storage_client()
 			path = get_file_path(self, client.folder)
 			self.file_url = FILE_URL.format(path=path)
-		if self.custom_disable_file_merge:
-			return
 		if not attached_to_doctype:
 			return
 		if not self.content_hash and "/api/method/retrieve" in self.file_url:  # type: ignore
@@ -478,6 +476,7 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 		"use_local", False
 	):
 		file.save_file_on_filesystem()
+		file.associate_files(file.attached_to_doctype, file.attached_to_name)
 		return file
 
 	if file.attached_to_doctype == "Data Import":
@@ -516,7 +515,6 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 					"content_type": file.content_type,
 				}
 			)
-			file_doc.associate_files(file.attached_to_doctype, file.attached_to_name)
 			file = file_doc
 
 	if remove_spaces_in_file_name:
@@ -539,6 +537,7 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 				file.file_name = f"{file.file_name}_{unique_suffix}"
 	
 	file.flags.cloud_storage = True
+	file.associate_files(file.attached_to_doctype, file.attached_to_name)
 	return upload_file(file)
 
 
