@@ -220,7 +220,7 @@ class CloudStorageFile(File):
 		elif self.file_url.startswith("http://") or self.file_url.startswith("https://"):
 			self._content = urlopen(self.file_url).read()
 		else:
-			file_path = quote(self.get_full_path())
+			file_path = self.get_full_path()
 			with open(file_path, mode="rb") as f:
 				self._content = f.read()
 				try:
