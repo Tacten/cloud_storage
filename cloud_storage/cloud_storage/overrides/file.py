@@ -482,6 +482,10 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 	if file.attached_to_doctype == "Data Import":
 		file.save_file_on_filesystem()
 		return file
+	
+	if file.attached_to_doctype == "Repost Item Valuation":
+		file.save_file_on_filesystem()
+		return file
 
 	# if a hash-conflict is found, update the existing document with a new file association
 	config = frappe.conf.cloud_storage_settings or {}
