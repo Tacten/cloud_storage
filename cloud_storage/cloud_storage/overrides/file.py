@@ -79,13 +79,21 @@ class CloudStorageFile(File):
 	def after_insert(self) -> File:
 		if self.attached_to_doctype and self.attached_to_name and not self.file_association and not self.custom_disable_file_merge:  # type: ignore
 			if not self.content_hash and "/api/method/retrieve" in self.file_url:  # type: ignore
-				associated_doc = frappe.get_value("File", {"file_url": self.file_url}, "name")  # type: ignore
-			else:
+				associated_doc = frappe.get_value(
+					"File",
+					{"file_url": self.file_url, "name": ["!=", self.name]},  # type: ignore
+					"name",
+				)
+			elif self.content_hash:  # type: ignore
 				associated_doc = frappe.get_value(
 					"File",
 					{"content_hash": self.content_hash, "name": ["!=", self.name], "is_folder": False},  # type: ignore
 				)
+			else:
+				# hash-less link (e.g. a pasted URL): there is nothing to match on, so never merge
+				associated_doc = None
 			if associated_doc:
+				original_file_url = self.file_url
 				self.db_set(
 					"file_url", ""
 				)  # this is done to prevent deletion of the remote file with the delete_file hook
@@ -99,6 +107,8 @@ class CloudStorageFile(File):
 					ignore_permissions=True,
 					# validate=False,
 				)
+				# restore in memory only (DB stays empty); the Attach field reads file_url from the returned doc
+				self.file_url = original_file_url
 
 	def on_trash(self) -> None:
 		user_roles = frappe.get_roles(frappe.session.user)
@@ -134,11 +144,14 @@ class CloudStorageFile(File):
 			return
 		if not self.content_hash and "/api/method/retrieve" in self.file_url:  # type: ignore
 			associated_doc = frappe.get_value("File", {"file_url": self.file_url}, "name")  # type: ignore
-		else:
+		elif self.content_hash:  # type: ignore
 			associated_doc = frappe.get_value(
 				"File",
 				{"content_hash": self.content_hash, "name": ["!=", self.name], "is_folder": False},  # type: ignore
 			)
+		else:
+			# hash-less link (e.g. a pasted URL): there is nothing to match on, so never merge
+			associated_doc = None
 		if associated_doc and associated_doc != self.name:
 			existing_file = frappe.get_doc("File", associated_doc)
 			existing_file.attached_to_doctype = attached_to_doctype
