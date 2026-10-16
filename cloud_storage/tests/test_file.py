@@ -114,6 +114,95 @@ def test_upload_file_with_multiple_association(example_file_record_1):
 
 
 @mock_s3
+def test_pasted_links_are_not_merged_with_each_other():
+	"""Two hash-less link Files (pasted URLs) must not be treated as duplicates of each other.
+
+	Previously the lookup used content_hash=None, which matched the first link File, so the
+	second link was merged into it and never got its own File Association row.
+	"""
+	frappe.set_user("Administrator")
+	first = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": "pasted-link-one",
+			"file_url": "https://example.com/pasted-one.pdf",
+			"attached_to_doctype": "User",
+			"attached_to_name": "Administrator",
+			"is_folder": 0,
+		}
+	)
+	first.flags.ignore_file_validate = True
+	first.insert(ignore_permissions=True)
+
+	second = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": "pasted-link-two",
+			"file_url": "https://example.com/pasted-two.pdf",
+			"attached_to_doctype": "Module Def",
+			"attached_to_name": "Cloud Storage",
+			"is_folder": 0,
+		}
+	)
+	second.flags.ignore_file_validate = True
+	second.insert(ignore_permissions=True)
+
+	assert frappe.db.exists("File", first.name)
+	assert frappe.db.exists("File", second.name)
+
+	second_db = frappe.get_doc("File", second.name)
+	assert [(a.link_doctype, a.link_name) for a in second_db.file_association] == [
+		("Module Def", "Cloud Storage")
+	]
+
+	first_db = frappe.get_doc("File", first.name)
+	assert [(a.link_doctype, a.link_name) for a in first_db.file_association] == [
+		("User", "Administrator")
+	]
+
+
+@mock_s3
+def test_library_pick_preserves_file_url():
+	"""Picking an existing Library file for an Attach field must keep file_url on the returned doc.
+
+	after_insert merges the new File into the existing one and blanks file_url in the DB;
+	that blank must not leak into the in-memory doc, or the Attach field is set to "".
+	"""
+	frappe.set_user("Administrator")
+	file_url = "/api/method/retrieve?key=test_folder/User/Administrator/library-pick.png"
+
+	library = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": "library-pick.png",
+			"file_url": file_url,
+			"s3_key": "test_folder/User/Administrator/library-pick.png",
+			"attached_to_doctype": "User",
+			"attached_to_name": "Administrator",
+			"is_folder": 0,
+		}
+	)
+	library.flags.cloud_storage = True
+	library.insert(ignore_permissions=True)
+
+	picked = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": "library-pick.png",
+			"file_url": file_url,
+			"attached_to_doctype": "Module Def",
+			"attached_to_name": "Cloud Storage",
+			"attached_to_field": "some_attach_field",
+			"is_folder": 0,
+		}
+	)
+	picked.flags.cloud_storage = True
+	picked.insert(ignore_permissions=True)
+
+	assert picked.file_url == file_url
+
+
+@mock_s3
 def test_delete_file(example_file_record_2):
 	frappe.set_user("Administrator")
 	file = create_upload_file(example_file_record_2, file_name="atlogo_rust.svg")
